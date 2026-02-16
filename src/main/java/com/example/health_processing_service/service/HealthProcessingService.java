@@ -1,0 +1,64 @@
+package com.example.health_processing_service.service;
+
+import com.example.health_processing_service.domain.entity.ServiceStatusEntity;
+import com.example.health_processing_service.repository.ServiceStatusRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import monitoring_event_contract.event.HealthEvent;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class HealthProcessingService {
+
+    private final ServiceStatusRepository repository;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+
+    @Value("${health.alert-topic}")
+    private static final String ALERT_TOPIC = "health-alerts";
+
+    public void process(HealthEvent event) {
+
+        ServiceStatusEntity existing =
+                repository.findById(event.getServiceInstanceId())
+                        .orElse(null);
+
+        if (existing == null) {
+            createNewStatus(event);
+            return;
+        }
+
+        if (!existing.getCurrentStatus().equals(event.getStatus())) {
+            log.warn("Service status changed from {} to {}", existing.getCurrentStatus(), event.getStatus());
+            publishAlert(existing, event);
+            existing.setCurrentStatus(event.getStatus());
+            existing.setLastUpdated(Instant.now());
+            repository.save(existing);
+        }
+    }
+
+    private void createNewStatus(HealthEvent event) {
+        ServiceStatusEntity entity = new ServiceStatusEntity();
+        entity.setServiceInstanceId(event.getServiceInstanceId());
+        entity.setTenantId(event.getTenantId());
+        entity.setServiceName(event.getServiceName());
+        entity.setCurrentStatus(event.getStatus());
+        entity.setLastUpdated(Instant.now());
+        repository.save(entity);
+    }
+
+    private void publishAlert(ServiceStatusEntity old, HealthEvent event) {
+
+        log.warn("Service {} changed from {} to {}",
+                event.getServiceName(),
+                old.getCurrentStatus(),
+                event.getStatus());
+
+        kafkaTemplate.send(ALERT_TOPIC, event);
+    }
+}
