@@ -34,3 +34,8 @@ server:
 
 health:
   alert-topic: health-alerts
+
+monitoring:
+  heartbeat:
+    expiry-threshold-ms: 30000   # 30 seconds
+    check-interval-ms: 10000     # run expiry engine every 10 seconds

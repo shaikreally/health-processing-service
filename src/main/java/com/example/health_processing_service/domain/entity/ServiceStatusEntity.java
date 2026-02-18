@@ -19,4 +19,5 @@ public class ServiceStatusEntity {
     private String serviceName;
     private String currentStatus;
     private Instant lastUpdated;
+    private Instant lastHeartbeatAt;
 }

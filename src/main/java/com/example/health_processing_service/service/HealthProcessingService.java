@@ -20,35 +20,39 @@ public class HealthProcessingService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @Value("${health.alert-topic}")
-    private static final String ALERT_TOPIC = "health-alerts";
+    private static String ALERT_TOPIC;
 
     public void process(HealthEvent event) {
 
+        Instant now = Instant.now();
         ServiceStatusEntity existing =
                 repository.findById(event.getServiceInstanceId())
                         .orElse(null);
 
         if (existing == null) {
-            createNewStatus(event);
+            createNewStatus(event, now);
             return;
         }
+
+        existing.setLastHeartbeatAt(now);
 
         if (!existing.getCurrentStatus().equals(event.getStatus())) {
             log.warn("Service status changed from {} to {}", existing.getCurrentStatus(), event.getStatus());
             publishAlert(existing, event);
             existing.setCurrentStatus(event.getStatus());
-            existing.setLastUpdated(Instant.now());
-            repository.save(existing);
+            existing.setLastUpdated(now);
         }
+        repository.save(existing);
     }
 
-    private void createNewStatus(HealthEvent event) {
+    private void createNewStatus(HealthEvent event, Instant now) {
         ServiceStatusEntity entity = new ServiceStatusEntity();
         entity.setServiceInstanceId(event.getServiceInstanceId());
         entity.setTenantId(event.getTenantId());
         entity.setServiceName(event.getServiceName());
         entity.setCurrentStatus(event.getStatus());
         entity.setLastUpdated(Instant.now());
+        entity.setLastHeartbeatAt(now);
         repository.save(entity);
     }
 
