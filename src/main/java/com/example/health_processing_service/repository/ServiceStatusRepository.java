@@ -10,6 +10,13 @@ import java.util.List;
 
 public interface ServiceStatusRepository extends JpaRepository<ServiceStatusEntity, String> {
 
-    @Query("SELECT s FROM service_status s WHERE s.currentStatus = 'UP' AND s.lastHeartbeatAt < :expiryTime")
+    long countByCurrentStatus(String currentStatus);
+
+    long countByTenantIdAndCurrentStatus(String tenantId, String currentStatus);
+
+    @Query("SELECT DISTINCT s.tenantId FROM ServiceStatusEntity s")
+    List<String> findDistinctTenantIds();
+
+    @Query("SELECT s FROM ServiceStatusEntity s WHERE s.currentStatus = 'UP' AND s.lastHeartbeatAt < :expiryTime")
     List<ServiceStatusEntity> findExpiredServices(@Param("expiryTime") Instant expiryTime);
 }

@@ -25,23 +25,21 @@ public class HealthProcessingService {
     public void process(HealthEvent event) {
 
         Instant now = Instant.now();
-        ServiceStatusEntity existing =
-                repository.findById(event.getServiceInstanceId())
-                        .orElse(null);
+        ServiceStatusEntity existing = repository.findById(event.getServiceInstanceId()).orElse(null);
 
         if (existing == null) {
             createNewStatus(event, now);
             return;
         }
 
-        existing.setLastHeartbeatAt(now);
-
+        // Service status changed from UP to DOWN or viceversa
         if (!existing.getCurrentStatus().equals(event.getStatus())) {
-            log.warn("Service status changed from {} to {}", existing.getCurrentStatus(), event.getStatus());
-            publishAlert(existing, event);
-            existing.setCurrentStatus(event.getStatus());
+            publishAlert(event);
             existing.setLastUpdated(now);
+            existing.setCurrentStatus(event.getStatus());
+            log.warn("Service status changed from {} to {}", existing.getCurrentStatus(), event.getStatus());
         }
+        existing.setLastHeartbeatAt(now);
         repository.save(existing);
     }
 
@@ -56,13 +54,7 @@ public class HealthProcessingService {
         repository.save(entity);
     }
 
-    private void publishAlert(ServiceStatusEntity old, HealthEvent event) {
-
-        log.warn("Service {} changed from {} to {}",
-                event.getServiceName(),
-                old.getCurrentStatus(),
-                event.getStatus());
-
+    private void publishAlert(HealthEvent event) {
         kafkaTemplate.send(ALERT_TOPIC, event);
     }
 }

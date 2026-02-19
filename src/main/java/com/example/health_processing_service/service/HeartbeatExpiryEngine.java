@@ -4,13 +4,12 @@ import com.example.health_processing_service.domain.entity.ServiceStatusEntity;
 import com.example.health_processing_service.repository.ServiceStatusRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import monitoring_event_contract.event.HealthEvent;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import monitoring_event_contract.event.HealthEvent;
 
 import java.time.Instant;
 import java.util.List;
@@ -26,7 +25,7 @@ public class HeartbeatExpiryEngine {
     @Value("${health.alert-topic}")
     private String ALERT_TOPIC;
 
-    // heartbeat threshold in milliseconds (e.g. 60 * 1000)
+    // heartbeat threshold in milliseconds (e.g. 3000)
     @Value("@{monitoring.heartbeat.expiry-threshold-ms}")
     private static long EXPIRY_THRESHOLD_MS;
 
@@ -36,31 +35,30 @@ public class HeartbeatExpiryEngine {
         Instant expiryCutoff = Instant.now().minusMillis(EXPIRY_THRESHOLD_MS);
         log.debug("Checking expired services with cutoff {}", expiryCutoff);
 
-        List<ServiceStatusEntity> expiredServices =
-                repository.findExpiredServices(expiryCutoff);
+        List<ServiceStatusEntity> expiredServices = repository.findExpiredServices(expiryCutoff);
 
-        for (ServiceStatusEntity svc : expiredServices) {
-            markDownAndPublish(svc);
+        for (ServiceStatusEntity sse : expiredServices) {
+            markDownAndPublishAlert(sse);
         }
     }
 
-    private void markDownAndPublish(ServiceStatusEntity svc) {
+    private void markDownAndPublishAlert(ServiceStatusEntity sse) {
         // Avoid duplicate state transitions
-        if (!"UP".equals(svc.getCurrentStatus())) {
+        if (!"UP".equals(sse.getCurrentStatus())) {
             return;
         }
 
-        log.warn("Service expired: {} Marking DOWN", svc.getServiceInstanceId());
-        svc.setCurrentStatus("DOWN");
-        svc.setLastUpdated(Instant.now());
+        log.warn("Service expired: {} Marking DOWN", sse.getServiceInstanceId());
+        sse.setCurrentStatus("DOWN");
+        sse.setLastUpdated(Instant.now());
 
-        repository.save(svc);
+        repository.save(sse);
 
         // Create alert event
         HealthEvent alertEvent = new HealthEvent();
-        alertEvent.setTenantId(svc.getTenantId());
-        alertEvent.setServiceName(svc.getServiceName());
-        alertEvent.setServiceInstanceId(svc.getServiceInstanceId());
+        alertEvent.setTenantId(sse.getTenantId());
+        alertEvent.setServiceName(sse.getServiceName());
+        alertEvent.setServiceInstanceId(sse.getServiceInstanceId());
         alertEvent.setStatus("DOWN");
         alertEvent.setTimestamp(Instant.now());
 
