@@ -20,7 +20,7 @@ public class HealthProcessingService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @Value("${health.alert-topic}")
-    private static String ALERT_TOPIC;
+    private String ALERT_TOPIC;
 
     public void process(HealthEvent event) {
 
@@ -31,6 +31,8 @@ public class HealthProcessingService {
             createNewStatus(event, now);
             return;
         }
+
+        log.warn("Status : "+existing.getCurrentStatus().equals(event.getStatus()));
 
         // Service status changed from UP to DOWN or viceversa
         if (!existing.getCurrentStatus().equals(event.getStatus())) {
